@@ -20,7 +20,7 @@
     <h2 class="text-center mb-5">MP 停車場</h2>
     <h3>請確認前方沒有其他車輛</h3>
     <h3>再按下按鈕</h3>
-    <button class="btn btn-danger btn-lg btn-block mt-5" @click="closeWindow">打開柵欄</button>
+    <button class="btn btn-danger btn-lg btn-block mt-5" @click="enter">打開柵欄</button>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.11/lodash.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.8/vue.min.js"></script>
@@ -31,6 +31,18 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/locale/zh-tw.js"></script>
   <script src="https://d.line-scdn.net/liff/1.0/sdk.js"></script>
   <script>
+    const color = {
+      black: '#242a36', // 黑色
+      gray: '#999999', // 灰色
+      lightGray: '#dddddd', // 亮灰色
+      orange: '#f9901e', // 橘色
+      red: '#ff0028', // 紅色
+      teal: '#1c8c82', // 水鴨青
+      turquoise: '#40c2b8', // 綠寶石
+      white: '#ffffff', // 白色
+      yellow: '#ffd654' // 黃
+    }
+
     // 設定 moment
     moment.locale('zh-tw')
     // https://momentjs.com/docs/#/customization/relative-time-threshold/
@@ -56,7 +68,104 @@
             liff.init(resolve, reject)
           })
         },
-        closeWindow () {
+        async enter () {
+          let nowStr = moment().format('Y/MM/DD HH:mm')
+          await liff.sendMessage([
+            {
+              'type': 'flex',
+              'altText': `您已於 ${nowStr} 進入「MP 停車場」`,
+              'contents': {
+                'type': 'bubble',
+                'styles': {
+                  'header': {
+                    'backgroundColor': color.yellow
+                  }
+                },
+                'header': {
+                  'type': 'box',
+                  'layout': 'vertical',
+                  'margin': 'md',
+                  'contents': [
+                    {
+                      'type': 'text',
+                      'text': '您已進入',
+                      'size': 'xs',
+                      'color': color.black
+                    },
+                    {
+                      'align': 'center',
+                      'color': color.black,
+                      'size': 'xxl',
+                      'text': 'MP 停車場',
+                      'type': 'text',
+                      'weight': 'bold',
+                    }
+                  ]
+                },
+                'body': {
+                  'type': 'box',
+                  'layout': 'vertical',
+                  'contents': [
+                    {
+                      'type': 'box',
+                      'layout': 'horizontal',
+                      'contents': [
+                        {
+                          'type': 'text',
+                          'text': '入場時間',
+                          'size': 'sm',
+                          'color': color.gray,
+                          'flex': 0
+                        },
+                        {
+                          'type': 'text',
+                          'text': nowStr,
+                          'size': 'sm',
+                          'color': color.black,
+                          'align': 'end'
+                        }
+                      ]
+                    },
+                    {
+                      'type': 'box',
+                      'layout': 'horizontal',
+                      'contents': [
+                        {
+                          'type': 'text',
+                          'text': '停車費率',
+                          'size': 'sm',
+                          'color': color.gray,
+                          'flex': 0
+                        },
+                        {
+                          'type': 'text',
+                          'text': '每小時 40 元',
+                          'size': 'sm',
+                          'color': color.black,
+                          'align': 'end'
+                        }
+                      ]
+                    },
+                  ]
+                },
+                'footer': {
+                  'type': 'box',
+                  'layout': 'horizontal',
+                  'contents': [{
+                    'type': 'button',
+                    'style': 'secondary',
+                    'height': 'md',
+                    'color': color.yellow,
+                    'action': {
+                      'type': 'uri',
+                      'label': '我要出場',
+                      'uri': 'line://app/1558590172-3dZgPjvR'
+                    }
+                  }]
+                }
+              }
+            }
+          ])
           liff.closeWindow()
         }
       }
