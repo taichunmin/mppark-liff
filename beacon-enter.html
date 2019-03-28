@@ -73,7 +73,7 @@
         async enter () {
           let nowStr = moment().format('Y/MM/DD HH:mm')
           await this.initLiff()
-          await liff.sendMessage([
+          await liff.sendMessages([
             {
               'type': 'flex',
               'altText': `您已於 ${nowStr} 進入「MP 停車場」`,
