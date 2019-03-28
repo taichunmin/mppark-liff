@@ -70,6 +70,7 @@
         },
         async enter () {
           let nowStr = moment().format('Y/MM/DD HH:mm')
+          await this.initLiff()
           await liff.sendMessage([
             {
               'type': 'flex',
