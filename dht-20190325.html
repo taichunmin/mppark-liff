@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Linkit 7697 溫濕度</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.3.1/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <style>
+    [v-cloak] {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container text-monospace" id="app" v-cloak="v-cloak">
+    <h2 class="text-center my-5">LINE Things Demo</h2>
+    <div class="table-responsive">
+      <table class="table table-striped">
+        <tr>
+          <th class="text-right text-nowrap" style="width: 20%;">連線狀態</th>
+          <td>
+            <pre class="my-0">{{ text || (updatedAt ? `最後更新於 ${updatedAt.from(now)}` : '系統錯誤') }}</pre>
+          </td>
+        </tr>
+        <tr>
+          <th class="text-right text-nowrap">裝置 ID</th>
+          <td>{{ deviceId || '?' }}</td>
+        </tr>
+        <tr>
+          <th class="text-right text-nowrap">裝置名稱</th>
+          <td>{{ deviceName || '?' }}</td>
+        </tr>
+        <tr>
+          <th class="text-right text-nowrap">裝置 PSDI</th>
+          <td>{{ devicePsdi || '?' }}</td>
+        </tr>
+        <tr>
+          <th class="text-right text-nowrap">溫度</th>
+          <td>{{ temperature ? `${temperature}℃` : '?' }}</td>
+        </tr>
+        <tr>
+          <th class="text-right text-nowrap">濕度</th>
+          <td>{{ humidity ? `${humidity} %` : '?' }}</td>
+        </tr>
+        <tr>
+          <th class="text-right text-nowrap">LED</th>
+          <td class="py-2">
+            <button class="btn btn-sm btn-success" v-if="led" @click="writeLed(0)"><i class="fa fa-fw fa-toggle-on"></i> On</button>
+            <button class="btn btn-sm btn-danger" v-else="v-else" @click="writeLed(1)"><i class="fa fa-fw fa-toggle-off"></i> Off</button>
+          </td>
+        </tr>
+        <tr>
+          <th class="text-right text-nowrap"></th>
+          <td class="py-2">
+            <button class="btn btn-sm btn-success" @click="readDht"><i class="fa fa-fw fa-refresh"></i> 重新讀取</button>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.11/lodash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.8/vue.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.slim.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.4/umd/popper.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.3.1/js/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/moment.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.22.2/locale/zh-tw.js"></script>
+  <script src="https://d.line-scdn.net/liff/1.0/sdk.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vConsole/3.3.0/vconsole.min.js"></script>
+  <script>
+    var vConsole = new VConsole()
+    const USER_SERVICE_UUID = '42E08EC0-5B79-424D-8DAC-68F44E021335'
+    const PSDI_SERVICE_UUID = 'E625601E-9E55-4597-A598-76018A0D293D'
+    const TEMPERATURE_CHAR_UUID = '6136A0AB-704D-48AE-BCEF-18844B2B3311'
+    const HUMIDITY_CHAR_UUID = '52842A6F-529B-4953-92C1-04DB36560CA6'
+    const LED_CHAR_UUID = 'E9062E71-9E62-4BC6-B0D3-35CDCD9B027B'
+    const PSDI_CHAR_UUID = '26E2B12B-85F0-4F3F-9FDD-91D114270E6E'
+    let device = null
+    // 設定 moment
+    moment.locale('zh-tw')
+    // https://momentjs.com/docs/#/customization/relative-time-threshold/
+    moment.relativeTimeThreshold('s', 60)
+    moment.relativeTimeThreshold('m', 60)
+    moment.relativeTimeThreshold('h', 24)
+    moment.relativeTimeThreshold('ss', -1)
+    moment.updateLocale('zh-tw', {
+      relativeTime: {
+        ss: '%d 秒'
+      }
+    })
+    async function getCharStr(service, uuid) {
+      let characteristic = await service.getCharacteristic(uuid)
+      let value = await characteristic.readValue()
+      return new TextDecoder().decode(value)
+    }
+    async function getCharInt32(service, uuid) {
+      let characteristic = await service.getCharacteristic(uuid)
+      let value = await characteristic.readValue()
+      return value.getInt32()
+    }
+    async function setCharInt32(service, uuid, newVal) {
+      let characteristic = await service.getCharacteristic(uuid)
+      await characteristic.writeValue(new Uint32Array([newVal]))
+    }
+    async function getCharHex(service, uuid) {
+      let characteristic = await service.getCharacteristic(uuid)
+      let value = await characteristic.readValue()
+      return new Uint8Array(value.buffer)
+        .reduce((output, byte) => output + ("0" + byte.toString(16)).slice(-2), "")
+    }
+    let vm = new Vue({
+      el: '#app',
+      mounted() {
+        this.readDht()
+        // 設定計時器
+        setInterval(() => {
+          this.now = moment()
+          if (!this.text && this.now > this.updatedAt + 1e4) this.readDht()
+        }, 1000)
+      },
+      data: {
+        deviceId: null,
+        deviceName: null,
+        devicePsdi: null,
+        led: null,
+        temperature: null,
+        humidity: null,
+        userId: null,
+        text: '尚未初始化',
+        updatedAt: null,
+        now: moment()
+      },
+      methods: {
+        async initLiff() {
+          // https://developers.line.biz/en/docs/line-things/develop-liff-app/
+          if (device) return device
+          this.text = '等候 LIFF 初始化...'
+          await new Promise((resolve, reject) => {
+            liff.init(resolve, reject)
+          })
+          this.text = '等候藍芽初始化...'
+          await liff.initPlugins(['bluetooth'])
+          this.text = '檢查藍芽可用性...'
+          await liff.bluetooth.getAvailability()
+          this.text = '搜尋裝置中...'
+          device = await liff.bluetooth.requestDevice()
+          this.text = '裝置連線中...'
+          await device.gatt.connect()
+          // 設定裝置資料
+          this.deviceId = device.id
+          this.deviceName = device.name
+          // 處理斷線事件
+          const disconnectCallback = () => {
+            this.text = '已中斷連線'
+            // 移除 callback
+            device.removeEventListener('gattserverdisconnected', disconnectCallback)
+            // 刪除 device
+            device = null
+          }
+          device.addEventListener('gattserverdisconnected', disconnectCallback);
+          return device
+        },
+        async readDht() {
+          try {
+            let device = await this.initLiff()
+            this.text = '讀取資料中...'
+            let userService = await device.gatt.getPrimaryService(USER_SERVICE_UUID)
+            // 讀取 LED 燈號
+            this.led = await getCharInt32(userService, LED_CHAR_UUID)
+            // 讀取溫度
+            this.temperature = await getCharStr(userService, TEMPERATURE_CHAR_UUID)
+            // 讀取濕度
+            this.humidity = await getCharStr(userService, HUMIDITY_CHAR_UUID)
+            // 讀取 psdi
+            let psdiService = await device.gatt.getPrimaryService(PSDI_SERVICE_UUID)
+            this.devicePsdi = await getCharStr(psdiService, PSDI_CHAR_UUID)
+            // 讀取成功 更新時間
+            this.updatedAt = moment()
+            this.text = ''
+          } catch (err) {
+            this.text = err.stack
+            console.log(err)
+          }
+        },
+        async writeLed(state) {
+          try {
+            let device = await this.initLiff()
+            this.text = '寫入 LED 資料中...'
+            let userService = await device.gatt.getPrimaryService(USER_SERVICE_UUID)
+            await setCharInt32(userService, LED_CHAR_UUID, state)
+            await this.readDht()
+          } catch (err) {
+            this.text = err.stack
+            console.log(err)
+          }
+        }
+      }
+    })
+  </script>
+</body>
+
+</html>
